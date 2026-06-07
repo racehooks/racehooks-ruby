@@ -328,6 +328,17 @@ class ClientErrorHandlingTest < Minitest::Test
     assert_equal 402, err.status_code
   end
 
+  def test_api_error_body_accessor
+    @stub.on(:get, "/v1/feeds") { [402, "Upgrade required"] }
+    client = make_client(@stub)
+    err = assert_raises(Racehooks::APIError) { client.get_feeds }
+    # err.body returns the raw response body;
+    # err.message (StandardError#message) returns the full formatted string.
+    assert_match "Upgrade required", err.body
+    assert_match "402", err.message
+    assert_match "Upgrade required", err.message
+  end
+
   def test_network_error_raises_network_error
     # Point at a port that is not listening
     client = Racehooks::Client.new("id", "sec", base_url: "http://127.0.0.1:1/v1")

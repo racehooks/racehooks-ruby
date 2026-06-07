@@ -70,6 +70,32 @@ class WebhookTest < Minitest::Test
     end
   end
 
+  def test_construct_event_nil_signature_raises_verification_error
+    # nil signature (missing header) must raise SignatureVerificationError,
+    # not crash with NoMethodError.
+    assert_raises(Racehooks::SignatureVerificationError) do
+      Racehooks::Webhook.construct_event(SAMPLE_BODY, nil, SECRET)
+    end
+  end
+
+  def test_verify_signature_nil_signature_returns_false
+    refute Racehooks::Webhook.verify_signature(SECRET, SAMPLE_BODY, nil),
+           "nil signature must return false, not raise"
+  end
+
+  def test_verify_signature_empty_signature_returns_false
+    refute Racehooks::Webhook.verify_signature(SECRET, SAMPLE_BODY, ""),
+           "empty signature must return false"
+  end
+
+  def test_compute_signature_nil_secret_raises_argument_error
+    assert_raises(ArgumentError) { Racehooks::Webhook.compute_signature(nil, SAMPLE_BODY) }
+  end
+
+  def test_compute_signature_nil_body_raises_argument_error
+    assert_raises(ArgumentError) { Racehooks::Webhook.compute_signature(SECRET, nil) }
+  end
+
   # ---------------------------------------------------------------------------
   # parse_payload
   # ---------------------------------------------------------------------------

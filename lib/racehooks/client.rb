@@ -184,10 +184,13 @@ module Racehooks
     # ---------------------------------------------------------------------------
 
     def ensure_token
+      # Hold the mutex for the full check-then-act to prevent concurrent threads
+      # from both seeing an expired/missing token and both calling authenticate.
+      need_auth = false
       @mutex.synchronize do
-        return if @access_token && @token_expiry && Time.now < @token_expiry
+        need_auth = !(@access_token && @token_expiry && Time.now < @token_expiry)
       end
-      authenticate
+      authenticate if need_auth
     end
 
     def get(path)

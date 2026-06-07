@@ -47,7 +47,11 @@ module Racehooks
     # @param secret [String] The webhook signing secret.
     # @param raw_body [String] The raw (unparsed) request body.
     # @return [String] Signature in the form "sha256=<hex>".
+    # @raise [ArgumentError] if +secret+ or +raw_body+ is nil.
     def self.compute_signature(secret, raw_body)
+      raise ArgumentError, "secret must not be nil"   if secret.nil?
+      raise ArgumentError, "raw_body must not be nil" if raw_body.nil?
+
       digest = OpenSSL::HMAC.hexdigest("SHA256", secret, raw_body)
       "sha256=#{digest}"
     end
@@ -55,12 +59,16 @@ module Racehooks
     # Verifies the HMAC-SHA256 signature on an incoming webhook.
     #
     # Uses a constant-time comparison to prevent timing attacks.
+    # Returns +false+ (rather than raising) when +signature+ is nil or empty,
+    # so callers can treat a missing header the same as an invalid one.
     #
     # @param secret    [String] The webhook signing secret.
     # @param raw_body  [String] The raw (unparsed) request body.
     # @param signature [String] Value of the X-RaceHooks-Signature header.
     # @return [Boolean] +true+ if the signature is valid.
     def self.verify_signature(secret, raw_body, signature)
+      return false if signature.nil? || signature.empty?
+
       expected = compute_signature(secret, raw_body)
       secure_compare(expected, signature)
     end

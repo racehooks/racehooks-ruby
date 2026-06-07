@@ -13,13 +13,13 @@ module Racehooks
   class APIError < Error
     # @return [Integer] HTTP status code
     attr_reader :status_code
-    # @return [String] Response body message
-    attr_reader :message
+    # @return [String] Raw response body
+    attr_reader :body
 
-    def initialize(status_code, message)
+    def initialize(status_code, body)
       @status_code = status_code
-      @message = message
-      super("RaceHooks API error #{status_code}: #{message}")
+      @body = body
+      super("RaceHooks API error #{status_code}: #{body}")
     end
   end
 
