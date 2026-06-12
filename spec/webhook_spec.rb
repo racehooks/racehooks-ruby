@@ -3,7 +3,7 @@ require_relative "../lib/racehooks"
 
 class WebhookTest < Minitest::Test
   SECRET = "test_webhook_secret_abc123"
-  SAMPLE_BODY = '{"type":"timingdata","sessionId":"session_monaco_r","data":{"1":{"LastLapTime":{"Value":"1:12.345"}}},"analytics":null}'
+  SAMPLE_BODY = '{"feed":"timingdata","sessionId":"session_monaco_r","data":{"1":{"LastLapTime":{"Value":"1:12.345"}}},"analytics":null}'
 
   # ---------------------------------------------------------------------------
   # compute_signature
@@ -59,7 +59,7 @@ class WebhookTest < Minitest::Test
     event = Racehooks::Webhook.construct_event(SAMPLE_BODY, sig, SECRET)
 
     assert_instance_of Racehooks::WebhookPayload, event
-    assert_equal "timingdata", event.type
+    assert_equal "timingdata", event.feed
     assert_equal "session_monaco_r", event.session_id
     assert_instance_of Hash, event.data
   end
@@ -102,38 +102,38 @@ class WebhookTest < Minitest::Test
 
   def test_parse_payload_no_signature
     event = Racehooks::Webhook.parse_payload(SAMPLE_BODY)
-    assert_equal "timingdata", event.type
+    assert_equal "timingdata", event.feed
   end
 
   def test_parse_payload_with_analytics
-    body = '{"type":"timingdata","sessionId":"s1","data":{},"analytics":{"overtakeProb":0.82}}'
+    body = '{"feed":"timingdata","sessionId":"s1","data":{},"analytics":{"overtakeProb":0.82}}'
     event = Racehooks::Webhook.parse_payload(body)
     assert event.analytics?, "expected analytics? to be true"
     assert_equal 0.82, event.analytics["overtakeProb"]
   end
 
   def test_parse_payload_without_analytics
-    body = '{"type":"weatherdata","sessionId":"s1","data":{"AirTemp":"23.5"}}'
+    body = '{"feed":"weatherdata","sessionId":"s1","data":{"AirTemp":"23.5"}}'
     event = Racehooks::Webhook.parse_payload(body)
     refute event.analytics?, "expected analytics? to be false"
     assert_nil event.analytics
   end
 
   def test_parse_payload_with_replay
-    body = '{"type":"cardata","sessionId":"s1","data":{},"_replay":{"sourcePath":"2025/race/","originalUtc":"2025-05-25T14:00:00Z","speed":60,"isReplay":true}}'
+    body = '{"feed":"cardata","sessionId":"s1","data":{},"_replay":{"sourcePath":"2025/race/","originalUtc":"2025-05-25T14:00:00Z","speed":60,"isReplay":true}}'
     event = Racehooks::Webhook.parse_payload(body)
     assert event.replay?, "expected replay? to be true"
     assert_equal "2025/race/", event.replay["sourcePath"]
   end
 
   def test_parse_payload_null_session_id
-    body = '{"type":"trackstatus","sessionId":null,"data":{"Status":"1"}}'
+    body = '{"feed":"trackstatus","sessionId":null,"data":{"Status":"1"}}'
     event = Racehooks::Webhook.parse_payload(body)
     assert_nil event.session_id
   end
 
   def test_parse_payload_data_accessible
-    body = '{"type":"weatherdata","sessionId":"s1","data":{"AirTemp":"23.5","Humidity":"55"}}'
+    body = '{"feed":"weatherdata","sessionId":"s1","data":{"AirTemp":"23.5","Humidity":"55"}}'
     event = Racehooks::Webhook.parse_payload(body)
     assert_equal "23.5", event.data["AirTemp"]
     assert_equal "55", event.data["Humidity"]

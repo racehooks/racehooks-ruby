@@ -5,7 +5,7 @@ module Racehooks
   # Payload parsed from an incoming RaceHooks webhook delivery.
   #
   # Attributes:
-  # - +type+         Feed identifier (e.g. "timingdata", "cardata", "raceevent").
+  # - +feed+         Feed identifier (e.g. "timingdata", "cardata", "raceevent").
   # - +session_id+   Active session ID string, or +nil+ between sessions.
   # - +data+         Feed payload as a Ruby Hash/Array (already parsed from JSON).
   # - +analytics+    Analytics enrichment Hash, or +nil+ if not present.
@@ -13,15 +13,15 @@ module Racehooks
   #
   # @example Accessing weather data
   #   event = Racehooks::Webhook.construct_event(raw_body, sig, secret)
-  #   case event.type
+  #   case event.feed
   #   when "weatherdata"
   #     puts event.data["AirTemp"]
   #   end
   class WebhookPayload
-    attr_reader :type, :session_id, :data, :analytics, :replay
+    attr_reader :feed, :session_id, :data, :analytics, :replay
 
-    def initialize(type:, session_id:, data:, analytics: nil, replay: nil)
-      @type       = type
+    def initialize(feed:, session_id:, data:, analytics: nil, replay: nil)
+      @feed       = feed
       @session_id = session_id
       @data       = data
       @analytics  = analytics
@@ -112,7 +112,7 @@ module Racehooks
     def self.parse_payload(raw_body)
       parsed = JSON.parse(raw_body)
       WebhookPayload.new(
-        type:       parsed["type"],
+        feed:       parsed["feed"],
         session_id: parsed["sessionId"],
         data:       parsed["data"],
         analytics:  parsed["analytics"],
