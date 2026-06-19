@@ -106,10 +106,34 @@ class WebhookTest < Minitest::Test
   end
 
   def test_parse_payload_analytics_strategy_feed
-    body = '{"feed":"analytics.strategy","sessionId":"s1","raceId":"2026-bahrain-r1","lap":22,"drivers":[{"tla":"VER","pitStopProbability":0.82}]}'
+    body = '{"feed":"analytics.strategy","sessionId":"s1","raceId":"2026-bahrain-r1","lap":22,"regulationsEra":"2026","drivers":[{"tla":"VER","pitStopProbability":0.82}]}'
     event = Racehooks::Webhook.parse_payload(body)
     assert_equal "analytics.strategy", event.feed
-    assert_equal 0.82, event.raw["drivers"][0]["pitStopProbability"]
+    assert_equal "2026-bahrain-r1", event.race_id
+    assert_equal 22, event.lap
+    assert_equal "2026", event.regulations_era
+    assert_equal 0.82, event.drivers[0]["pitStopProbability"]
+  end
+
+  def test_parse_payload_analytics_constructor_feed
+    body = '{"feed":"analytics.constructor","sessionId":"s1","raceId":"2026-bahrain-r1","lap":22,"constructors":[{"constructorId":"red_bull","expectedConstructorPoints":31.2}]}'
+    event = Racehooks::Webhook.parse_payload(body)
+    assert_equal "analytics.constructor", event.feed
+    assert_equal 31.2, event.constructors[0]["expectedConstructorPoints"]
+    assert_nil event.drivers
+  end
+
+  def test_parse_payload_analytics_race_odds_includes_pairs
+    body = '{"feed":"analytics.race-odds","sessionId":"s1","raceId":"2026-bahrain-r1","lap":22,"drivers":[],"pairs":[{"constructorId":"red_bull","driverA":"1","driverB":"11","h2hAWinsProbability":0.61}]}'
+    event = Racehooks::Webhook.parse_payload(body)
+    assert_equal 0.61, event.pairs[0]["h2hAWinsProbability"]
+  end
+
+  def test_parse_payload_analytics_qualifying_feed
+    body = '{"feed":"analytics.qualifying","sessionId":"s1","raceId":null,"lap":3,"sectors":{"poleMarginMs":142},"drivers":[]}'
+    event = Racehooks::Webhook.parse_payload(body)
+    assert_equal "analytics.qualifying", event.feed
+    assert_equal 142, event.sectors["poleMarginMs"]
   end
 
   def test_parse_payload_with_replay

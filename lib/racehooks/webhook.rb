@@ -5,31 +5,52 @@ module Racehooks
   # Payload parsed from an incoming RaceHooks webhook delivery.
   #
   # Attributes:
-  # - +feed+         Feed identifier (e.g. "timingdata", "cardata", "raceevent",
-  #                  "analytics.strategy", "analytics.race-odds", etc.).
-  # - +session_id+   Active session ID string, or +nil+ between sessions.
-  # - +data+         Feed payload as a Ruby Hash/Array (already parsed from JSON).
-  #                  Present on most feeds; analytics feeds use +drivers+, +constructors+,
-  #                  or +sectors+ at the top level instead.
-  # - +replay+       Replay metadata Hash, or +nil+ for live deliveries.
+  # - +feed+             Feed identifier (e.g. "timingdata", "cardata", "raceevent",
+  #                      "analytics.strategy", "analytics.race-odds", etc.).
+  # - +session_id+       Active session ID string, or +nil+ between sessions.
+  # - +data+             Feed payload Hash for session-wide feeds.
+  # - +drivers+          Array of per-driver Hashes. Present for timingdata, cardata,
+  #                      analytics.strategy, analytics.race-odds, analytics.gap-projection,
+  #                      and analytics.tire-strategy.
+  # - +constructors+     Array of constructor Hashes. Present for analytics.constructor.
+  # - +sectors+          Sector-probability Hash. Present for analytics.qualifying.
+  # - +pairs+            Array of same-constructor H2H Hashes. Present for analytics.race-odds.
+  # - +race_id+          Race identifier string. Present on analytics feeds.
+  # - +lap+              Race lap number. Present on per-lap analytics feeds.
+  # - +utc+              UTC timestamp string. Present on most feeds.
+  # - +after_race_id+    Identifies which race triggered the payload. Present on
+  #                      analytics.championship-probability.
+  # - +regulations_era+  Regulations era string (e.g. "2026"). Present on analytics feeds.
+  # - +replay+           Replay metadata Hash, or +nil+ for live deliveries.
   #
-  # @example Accessing weather data
+  # @example
   #   event = Racehooks::Webhook.construct_event(raw_body, sig, secret)
   #   case event.feed
   #   when "weatherdata"
   #     puts event.data["AirTemp"]
   #   when "analytics.strategy"
-  #     event.raw["drivers"].each { |d| puts "#{d["tla"]}: pit #{d["pitStopProbability"]}" }
+  #     event.drivers.each { |d| puts "#{d["tla"]}: pit #{d["pitStopProbability"]}" }
+  #   when "analytics.constructor"
+  #     event.constructors.each { |c| puts "#{c["constructorId"]}: #{c["expectedConstructorPoints"]} pts" }
   #   end
   class WebhookPayload
-    attr_reader :feed, :session_id, :data, :replay, :raw
+    attr_reader :feed, :session_id, :data, :drivers, :constructors, :sectors,
+                :pairs, :race_id, :lap, :utc, :after_race_id, :regulations_era, :replay
 
-    def initialize(feed:, session_id:, data:, replay: nil, raw: {})
-      @feed       = feed
-      @session_id = session_id
-      @data       = data
-      @replay     = replay
-      @raw        = raw
+    def initialize(parsed)
+      @feed             = parsed["feed"]
+      @session_id       = parsed["sessionId"]
+      @data             = parsed["data"]
+      @drivers          = parsed["drivers"]
+      @constructors     = parsed["constructors"]
+      @sectors          = parsed["sectors"]
+      @pairs            = parsed["pairs"]
+      @race_id          = parsed["raceId"]
+      @lap              = parsed["lap"]
+      @utc              = parsed["utc"]
+      @after_race_id    = parsed["afterRaceId"]
+      @regulations_era  = parsed["regulationsEra"]
+      @replay           = parsed["_replay"]
     end
 
     # Returns true when this delivery is part of a session replay.
@@ -96,9 +117,7 @@ module Racehooks
     #     head :unauthorized
     #   end
     def self.construct_event(raw_body, signature, secret)
-      unless verify_signature(secret, raw_body, signature)
-        raise SignatureVerificationError
-      end
+      raise SignatureVerificationError unless verify_signature(secret, raw_body, signature)
       parse_payload(raw_body)
     end
 
@@ -109,14 +128,7 @@ module Racehooks
     # @param raw_body [String] The raw JSON body.
     # @return [WebhookPayload]
     def self.parse_payload(raw_body)
-      parsed = JSON.parse(raw_body)
-      WebhookPayload.new(
-        feed:       parsed["feed"],
-        session_id: parsed["sessionId"],
-        data:       parsed["data"],
-        replay:     parsed["_replay"],
-        raw:        parsed,
-      )
+      WebhookPayload.new(JSON.parse(raw_body))
     end
 
     # Constant-time string comparison to prevent timing attacks.
