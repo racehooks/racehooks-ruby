@@ -5,10 +5,12 @@ module Racehooks
   # Payload parsed from an incoming RaceHooks webhook delivery.
   #
   # Attributes:
-  # - +feed+         Feed identifier (e.g. "timingdata", "cardata", "raceevent").
+  # - +feed+         Feed identifier (e.g. "timingdata", "cardata", "raceevent",
+  #                  "analytics.strategy", "analytics.race-odds", etc.).
   # - +session_id+   Active session ID string, or +nil+ between sessions.
   # - +data+         Feed payload as a Ruby Hash/Array (already parsed from JSON).
-  # - +analytics+    Analytics enrichment Hash, or +nil+ if not present.
+  #                  Present on most feeds; analytics feeds use +drivers+, +constructors+,
+  #                  or +sectors+ at the top level instead.
   # - +replay+       Replay metadata Hash, or +nil+ for live deliveries.
   #
   # @example Accessing weather data
@@ -16,21 +18,18 @@ module Racehooks
   #   case event.feed
   #   when "weatherdata"
   #     puts event.data["AirTemp"]
+  #   when "analytics.strategy"
+  #     event.raw["drivers"].each { |d| puts "#{d["tla"]}: pit #{d["pitStopProbability"]}" }
   #   end
   class WebhookPayload
-    attr_reader :feed, :session_id, :data, :analytics, :replay
+    attr_reader :feed, :session_id, :data, :replay, :raw
 
-    def initialize(feed:, session_id:, data:, analytics: nil, replay: nil)
+    def initialize(feed:, session_id:, data:, replay: nil, raw: {})
       @feed       = feed
       @session_id = session_id
       @data       = data
-      @analytics  = analytics
       @replay     = replay
-    end
-
-    # Returns true when analytics enrichment data is present in this delivery.
-    def analytics?
-      !@analytics.nil?
+      @raw        = raw
     end
 
     # Returns true when this delivery is part of a session replay.
@@ -115,8 +114,8 @@ module Racehooks
         feed:       parsed["feed"],
         session_id: parsed["sessionId"],
         data:       parsed["data"],
-        analytics:  parsed["analytics"],
         replay:     parsed["_replay"],
+        raw:        parsed,
       )
     end
 

@@ -3,7 +3,7 @@ require_relative "../lib/racehooks"
 
 class WebhookTest < Minitest::Test
   SECRET = "test_webhook_secret_abc123"
-  SAMPLE_BODY = '{"feed":"timingdata","sessionId":"session_monaco_r","data":{"1":{"LastLapTime":{"Value":"1:12.345"}}},"analytics":null}'
+  SAMPLE_BODY = '{"feed":"timingdata","sessionId":"session_monaco_r","data":{"1":{"LastLapTime":{"Value":"1:12.345"}}}}'
 
   # ---------------------------------------------------------------------------
   # compute_signature
@@ -105,18 +105,11 @@ class WebhookTest < Minitest::Test
     assert_equal "timingdata", event.feed
   end
 
-  def test_parse_payload_with_analytics
-    body = '{"feed":"timingdata","sessionId":"s1","data":{},"analytics":{"overtakeProb":0.82}}'
+  def test_parse_payload_analytics_strategy_feed
+    body = '{"feed":"analytics.strategy","sessionId":"s1","raceId":"2026-bahrain-r1","lap":22,"drivers":[{"tla":"VER","pitStopProbability":0.82}]}'
     event = Racehooks::Webhook.parse_payload(body)
-    assert event.analytics?, "expected analytics? to be true"
-    assert_equal 0.82, event.analytics["overtakeProb"]
-  end
-
-  def test_parse_payload_without_analytics
-    body = '{"feed":"weatherdata","sessionId":"s1","data":{"AirTemp":"23.5"}}'
-    event = Racehooks::Webhook.parse_payload(body)
-    refute event.analytics?, "expected analytics? to be false"
-    assert_nil event.analytics
+    assert_equal "analytics.strategy", event.feed
+    assert_equal 0.82, event.raw["drivers"][0]["pitStopProbability"]
   end
 
   def test_parse_payload_with_replay
