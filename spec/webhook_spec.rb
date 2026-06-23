@@ -161,4 +161,27 @@ class WebhookTest < Minitest::Test
       Racehooks::Webhook.parse_payload("not json")
     end
   end
+
+  def test_parse_payload_live_alert_feed_uses_data_and_lap
+    body = '{"feed":"analytics.battle","sessionId":"9724","lap":30,"utc":"t","data":{"battleStatus":"APPROACHING"}}'
+    event = Racehooks::Webhook.parse_payload(body)
+    assert_equal "analytics.battle", event.feed
+    assert_equal 30, event.lap
+    assert_equal "APPROACHING", event.data["battleStatus"]
+  end
+
+  def test_parse_payload_weather_rain_event_exposes_event_slug
+    body = '{"feed":"weather.rain_onset","sessionId":"9724","event":"rain_onset","lap":14,"utc":"t","data":{"type":"rain_onset","precipRateMmhr":1.2}}'
+    event = Racehooks::Webhook.parse_payload(body)
+    assert_equal "rain_onset", event.event
+    assert_equal 1.2, event.data["precipRateMmhr"]
+  end
+
+  def test_parse_payload_flat_weather_feed_via_bracket_accessor
+    body = '{"feed":"weather.forecast_update","sessionId":"9724","event":"weather.forecast_update","lap":10,"utc":"t","source":"open-meteo","model":"ukmo","currentPrecipRateMmhr":0.0,"precipProbabilityPct":65,"next60min":[]}'
+    event = Racehooks::Webhook.parse_payload(body)
+    assert_equal "weather.forecast_update", event.event
+    assert_equal "ukmo", event["model"]
+    assert_equal 65, event["precipProbabilityPct"]
+  end
 end

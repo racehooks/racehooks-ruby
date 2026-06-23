@@ -1,6 +1,6 @@
 # racehooks
 
-Official Ruby gem for RaceHooks — F1 live timing webhook signature verification
+Official Ruby gem for [RaceHooks](https://racehooks.io) — the motorsports analytics platform. Verify webhooks and parse 50+ live F1 feeds, including 18 derived analytics feeds backed by twelve production ML models.
 
 [![Gem Version](https://badge.fury.io/rb/racehooks.svg)](https://badge.fury.io/rb/racehooks)
 [![Ruby](https://img.shields.io/badge/ruby-%3E%3D%202.6-red.svg)](https://www.ruby-lang.org)
@@ -8,7 +8,7 @@ Official Ruby gem for RaceHooks — F1 live timing webhook signature verificatio
 
 > RaceHooks is an independent service and is not affiliated with or endorsed by Formula One Management or the FIA. "Formula 1," "F1," and related marks are trademarks of Formula One Licensing BV.
 
-RaceHooks pushes Formula 1 live timing events to your webhook endpoint. Each delivery is signed with HMAC-SHA256 so you can confirm it really came from RaceHooks and was not tampered with in transit. This gem verifies those signatures and parses deliveries into structured Ruby objects.
+RaceHooks delivers 50+ live F1 feeds — timing, race events, and 18 derived analytics feeds backed by twelve production ML models — to your webhook endpoint. Each delivery is signed with HMAC-SHA256 so you can confirm it really came from RaceHooks and was not tampered with in transit. This gem verifies those signatures and parses deliveries into structured Ruby objects.
 
 ## Install
 
@@ -59,7 +59,11 @@ class WebhooksController < ApplicationController
     when "weatherdata"
       Rails.logger.info "Air temp: #{event.data['AirTemp']}"
     when "raceevent"
-      Rails.logger.info "Race event: #{event.data['Message']}"
+      Rails.logger.info "Race event: #{event.event} — #{event.data['tla']}"
+    when "analytics.strategy"
+      event.drivers.each { |d| Rails.logger.info "#{d['tla']} pit prob: #{d['pitStopProbability']}" }
+    when "weather.forecast_update"
+      Rails.logger.info "Rain #{event['precipProbabilityPct']}% — model #{event['model']}"
     end
 
     head :ok
@@ -91,8 +95,8 @@ post "/webhook" do
     halt 400, "Invalid JSON"
   end
 
-  if event.analytics?
-    puts "Overtake probability: #{event.analytics['overtakeProb']}"
+  if event.feed == "analytics.battle"
+    puts "Battle: #{event.data['battleStatus']} (lap #{event.lap})"
   end
 
   if event.replay?
@@ -128,17 +132,25 @@ puts event.data       # => Hash
 
 | Attribute | Type | Description |
 |---|---|---|
-| `feed` | `String` | Feed identifier — e.g. `"timingdata"`, `"cardata"`, `"weatherdata"`, `"raceevent"` |
+| `feed` | `String` | Feed identifier — e.g. `"timingdata"`, `"raceevent"`, `"analytics.strategy"`, `"weather.forecast_update"` |
 | `session_id` | `String, nil` | Active session ID, or `nil` between sessions |
-| `data` | `Hash, Array` | Feed payload (already parsed from JSON) |
-| `analytics` | `Hash, nil` | Analytics enrichment (Analytics tier subscribers only) |
+| `event` | `String, nil` | Event slug on `raceevent` and the weather feeds (e.g. `"overtake"`, `"rain_onset"`) |
+| `data` | `Hash, Array, nil` | Feed payload for session-wide and data-wrapped feeds |
+| `drivers` | `Array, nil` | Per-driver rows (timingdata, cardata, analytics.strategy, …) |
+| `lap` | `Integer, nil` | Race lap on per-lap analytics + weather feeds |
+| `utc` | `String, nil` | ISO-8601 emit timestamp |
 | `replay` | `Hash, nil` | Replay metadata — present only for replayed deliveries |
+| `raw` | `Hash` | The full parsed payload |
 
-Helper predicates:
+The Analytics tier delivers 18 derived feeds (12 `analytics.*` + 6 `weather.*`). The
+live-alert feeds (`analytics.battle`, `.pit-window`, …) and data-wrapped weather feeds
+carry their payload in `data`; the flat weather feeds (`weather.forecast_update`,
+`.tyre_mismatch`, `.compound_crossover_alert`) put fields at the top level — read them
+with `event[key]`:
 
 ```ruby
-event.analytics?  # true when analytics enrichment is present
-event.replay?     # true when this is a replayed delivery
+event["precipProbabilityPct"]  # flat-feed field via the [] accessor
+event.replay?                  # true when this is a replayed delivery
 ```
 
 ## Replay protection

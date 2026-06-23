@@ -146,7 +146,7 @@ module Racehooks
     end
 
     # Retrieve the HMAC signing secret for a webhook (GET /v1/webhooks/:id/secret).
-    # Requires Starter plan or above.
+    # Available on all paid plans (Live, Analytics, Enterprise).
     #
     # @param webhook_id [String]
     # @return [String] The signing secret.

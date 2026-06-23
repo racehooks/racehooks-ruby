@@ -6,9 +6,11 @@ module Racehooks
   #
   # Attributes:
   # - +feed+             Feed identifier (e.g. "timingdata", "cardata", "raceevent",
-  #                      "analytics.strategy", "analytics.race-odds", etc.).
+  #                      "analytics.strategy", "weather.forecast_update", etc.).
   # - +session_id+       Active session ID string, or +nil+ between sessions.
-  # - +data+             Feed payload Hash for session-wide feeds.
+  # - +event+            Event slug on raceevent ("overtake") and weather feeds
+  #                      ("rain_onset", "weather.forecast_update"); +nil+ otherwise.
+  # - +data+             Feed payload Hash for session-wide and data-wrapped feeds.
   # - +drivers+          Array of per-driver Hashes. Present for timingdata, cardata,
   #                      analytics.strategy, analytics.race-odds, analytics.gap-projection,
   #                      and analytics.tire-strategy.
@@ -22,6 +24,15 @@ module Racehooks
   #                      analytics.championship-probability.
   # - +regulations_era+  Regulations era string (e.g. "2026"). Present on analytics feeds.
   # - +replay+           Replay metadata Hash, or +nil+ for live deliveries.
+  # - +raw+              The full parsed Hash. Use +event[key]+ to read fields on the
+  #                      flat weather feeds (weather.forecast_update, .tyre_mismatch,
+  #                      .compound_crossover_alert), whose fields live at the top level.
+  #
+  # The Analytics tier delivers 18 derived feeds (12 +analytics.*+ + 6 +weather.*+):
+  # the live-alert feeds (analytics.sector-pace, .battle, .pit-window,
+  # .track-conditions, .pit-quality) and data-wrapped weather feeds (rain_onset,
+  # rain_cleared, strategy_divergence) carry their payload in +data+; the flat
+  # weather feeds expose fields at the top level (read via +event[...]+).
   #
   # @example
   #   event = Racehooks::Webhook.construct_event(raw_body, sig, secret)
@@ -30,16 +41,20 @@ module Racehooks
   #     puts event.data["AirTemp"]
   #   when "analytics.strategy"
   #     event.drivers.each { |d| puts "#{d["tla"]}: pit #{d["pitStopProbability"]}" }
-  #   when "analytics.constructor"
-  #     event.constructors.each { |c| puts "#{c["constructorId"]}: #{c["expectedConstructorPoints"]} pts" }
+  #   when "analytics.battle"
+  #     puts "battle: #{event.data["battleStatus"]} (lap #{event.lap})"
+  #   when "weather.forecast_update"
+  #     puts "rain #{event["precipProbabilityPct"]}% — model #{event["model"]}"
   #   end
   class WebhookPayload
-    attr_reader :feed, :session_id, :data, :drivers, :constructors, :sectors,
-                :pairs, :race_id, :lap, :utc, :after_race_id, :regulations_era, :replay
+    attr_reader :feed, :session_id, :event, :data, :drivers, :constructors, :sectors,
+                :pairs, :race_id, :lap, :utc, :after_race_id, :regulations_era, :replay, :raw
 
     def initialize(parsed)
+      @raw              = parsed
       @feed             = parsed["feed"]
       @session_id       = parsed["sessionId"]
+      @event            = parsed["event"]
       @data             = parsed["data"]
       @drivers          = parsed["drivers"]
       @constructors     = parsed["constructors"]
@@ -51,6 +66,12 @@ module Racehooks
       @after_race_id    = parsed["afterRaceId"]
       @regulations_era  = parsed["regulationsEra"]
       @replay           = parsed["_replay"]
+    end
+
+    # Reads any top-level field from the raw payload — handy for the flat weather
+    # feeds whose fields are not surfaced as named accessors.
+    def [](key)
+      @raw[key]
     end
 
     # Returns true when this delivery is part of a session replay.
