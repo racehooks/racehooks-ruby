@@ -1,13 +1,16 @@
+require_relative "lib/racehooks/version"
+
 Gem::Specification.new do |spec|
   spec.name          = "racehooks"
-  spec.version       = "0.1.0"
+  spec.version       = Racehooks::VERSION
   spec.authors       = ["RaceHooks"]
-  spec.email         = ["contact@racehooks-ai.com"]
+  spec.email         = ["contact@racehooks.io"]
 
-  spec.summary       = "Ruby client for the RaceHooks F1 live timing webhook API"
+  spec.summary       = "Official Ruby client for RaceHooks — the motorsports analytics platform"
   spec.description   = "Webhook signature verification, construct_event, and a REST client " \
-                       "for the RaceHooks API. Receive live F1 timing feeds — car telemetry, " \
-                       "lap times, tyre data, race control messages, and more."
+                       "for RaceHooks, the motorsports analytics platform. Parse 50+ live F1 " \
+                       "feeds — timing, race events, and derived analytics feeds backed by " \
+                       "twelve production ML models — delivered to your webhook endpoint."
   spec.homepage      = "https://racehooks.io"
   spec.license       = "MIT"
 

@@ -1,6 +1,6 @@
 # racehooks
 
-Official Ruby gem for [RaceHooks](https://racehooks.io) — the motorsports analytics platform. Verify webhooks and parse 50+ live F1 feeds, including 18 derived analytics feeds backed by twelve production ML models.
+Official Ruby gem for [RaceHooks](https://racehooks.io) — the motorsports analytics platform. Verify webhooks and parse live F1 feeds, including derived analytics feeds backed by production ML models.
 
 [![Gem Version](https://badge.fury.io/rb/racehooks.svg)](https://badge.fury.io/rb/racehooks)
 [![Ruby](https://img.shields.io/badge/ruby-%3E%3D%202.6-red.svg)](https://www.ruby-lang.org)
@@ -8,7 +8,7 @@ Official Ruby gem for [RaceHooks](https://racehooks.io) — the motorsports anal
 
 > RaceHooks is an independent service and is not affiliated with or endorsed by Formula One Management or the FIA. "Formula 1," "F1," and related marks are trademarks of Formula One Licensing BV.
 
-RaceHooks delivers 50+ live F1 feeds — timing, race events, and 18 derived analytics feeds backed by twelve production ML models — to your webhook endpoint. Each delivery is signed with HMAC-SHA256 so you can confirm it really came from RaceHooks and was not tampered with in transit. This gem verifies those signatures and parses deliveries into structured Ruby objects.
+RaceHooks delivers live F1 feeds — timing, race events, and derived analytics feeds backed by production ML models — to your webhook endpoint. Each delivery is signed with HMAC-SHA256 so you can confirm it really came from RaceHooks and was not tampered with in transit. This gem verifies those signatures and parses deliveries into structured Ruby objects.
 
 ## Install
 
@@ -53,16 +53,16 @@ class WebhooksController < ApplicationController
     )
 
     case event.feed
-    when "timingdata"
+    when "timing.data"
       # event.data contains the full timing payload hash
       Rails.logger.info "Timing update for session #{event.session_id}"
-    when "weatherdata"
+    when "weather.data"
       Rails.logger.info "Air temp: #{event.data['AirTemp']}"
-    when "raceevent"
+    when "events.race"
       Rails.logger.info "Race event: #{event.event} — #{event.data['tla']}"
     when "analytics.strategy"
       event.drivers.each { |d| Rails.logger.info "#{d['tla']} pit prob: #{d['pitStopProbability']}" }
-    when "weather.forecast_update"
+    when "weather.forecast-update"
       Rails.logger.info "Rain #{event['precipProbabilityPct']}% — model #{event['model']}"
     end
 
@@ -100,7 +100,7 @@ post "/webhook" do
   end
 
   if event.replay?
-    puts "Replaying from #{event.replay['sourcePath']}"
+    puts "Replay #{event.replay['simulationId']} of session #{event.replay['originalSessionId']}"
   end
 
   status 200
@@ -121,7 +121,7 @@ Or parse without verification (useful in tests):
 
 ```ruby
 event = Racehooks::Webhook.parse_payload(raw_body)
-puts event.feed       # => "timingdata"
+puts event.feed       # => "timing.data"
 puts event.session_id # => "session_monaco_r"
 puts event.data       # => Hash
 ```
@@ -132,20 +132,24 @@ puts event.data       # => Hash
 
 | Attribute | Type | Description |
 |---|---|---|
-| `feed` | `String` | Feed identifier — e.g. `"timingdata"`, `"raceevent"`, `"analytics.strategy"`, `"weather.forecast_update"` |
+| `feed` | `String` | Canonical feed identifier — e.g. `"timing.data"`, `"events.race"`, `"analytics.strategy"`, `"weather.forecast-update"` |
 | `session_id` | `String, nil` | Active session ID, or `nil` between sessions |
-| `event` | `String, nil` | Event slug on `raceevent` and the weather feeds (e.g. `"overtake"`, `"rain_onset"`) |
+| `race_id` | `String, nil` | Race identifier on analytics feeds — distinct from `session_id`, and nullable |
+| `event` | `String, nil` | Event slug on `events.race` / `events.qualifying` and the weather feeds (e.g. `"overtake"`, `"rain-onset"`) |
 | `data` | `Hash, Array, nil` | Feed payload for session-wide and data-wrapped feeds |
-| `drivers` | `Array, nil` | Per-driver rows (timingdata, cardata, analytics.strategy, …) |
+| `drivers` | `Array, nil` | Per-driver DriverRef rows (timing.data, analytics.strategy, …) |
 | `lap` | `Integer, nil` | Race lap on per-lap analytics + weather feeds |
 | `utc` | `String, nil` | ISO-8601 emit timestamp |
-| `replay` | `Hash, nil` | Replay metadata — present only for replayed deliveries |
+| `replay` | `Hash, nil` | Replay metadata (`simulationId`, `originalSessionId`, `sessionElapsed`) — present only for replayed deliveries |
 | `raw` | `Hash` | The full parsed payload |
 
-The Analytics tier delivers 18 derived feeds (12 `analytics.*` + 6 `weather.*`). The
+Each per-driver entry carries the full DriverRef identity block: `driverId`,
+`constructorId`, `number`, `tla`, `name`, and `team`.
+
+The Analytics tier delivers a range of derived `analytics.*` and `weather.*` feeds. The
 live-alert feeds (`analytics.battle`, `.pit-window`, …) and data-wrapped weather feeds
-carry their payload in `data`; the flat weather feeds (`weather.forecast_update`,
-`.tyre_mismatch`, `.compound_crossover_alert`) put fields at the top level — read them
+carry their payload in `data`; the flat weather feeds (`weather.forecast-update`,
+`.tire-mismatch`, `.compound-crossover`) put fields at the top level — read them
 with `event[key]`:
 
 ```ruby
@@ -195,12 +199,34 @@ result = client.get_feeds
 result[:feeds].each { |f| puts "#{f[:feedId]} — #{f[:name]}" }
 ```
 
+### Events
+
+```ruby
+# List calendar events (optionally filtered)
+result = client.get_events(upcoming: true, year: 2026)
+result[:events].each do |e|
+  puts "#{e[:roundText]}: #{e[:name]} (#{e[:circuitName]})"
+  e[:sessions]&.each { |s| puts "  #{s[:name]} — #{s[:startDate]} [#{s[:status]}]" }
+end
+```
+
+### Live context
+
+```ruby
+# Snapshot of the currently live session (active: false when nothing is live)
+ctx = client.get_live_context
+if ctx[:active]
+  puts "#{ctx[:sessionName]} — lap #{ctx[:currentLap]}/#{ctx[:totalLaps]} (#{ctx[:flag]})"
+  ctx[:drivers].each { |d| puts "P#{d[:pos]} #{d[:tla]} #{d[:gap]}" }
+end
+```
+
 ### Webhooks
 
 ```ruby
 # Create a subscription
 result = client.create_webhook(
-  feed_id:        "timingdata",
+  feed_id:        "timing.data",
   webhook_url:    "https://example.com/hook",
   webhook_method: "post"
 )
@@ -238,18 +264,37 @@ secret = client.get_webhook_secret("wh_abc123")
 new_secret = client.rotate_webhook_secret("wh_abc123")
 ```
 
+### Fantasy scoring (paid plan)
+
+```ruby
+# Estimated fantasy points for a completed race
+scores = client.get_race_scores("2026-bahrain-r1")
+puts scores[:sessionType]  # "grand_prix"
+
+# Score the Sprint instead (compressed points table)
+client.get_race_scores("2026-bahrain-r1", session: "sprint")
+
+# Running (provisional) score while a session is live
+live = client.get_session_scores("2026-bahrain-r1_Race")
+puts live[:live]  # true/false
+
+# Pit stop time leaderboard for a session
+pits = client.get_session_pit_times("2026-bahrain-r1_Race")
+pits[:stops].each { |s| puts "#{s[:tla]}: #{s[:pitStopTimeSec]}s" }
+```
+
 ### Optional filters (on `create_webhook` and `update_webhook`)
 
 ```ruby
 client.create_webhook(
-  feed_id:     "timingdata",
+  feed_id:     "events.race",
   webhook_url: "https://example.com/hook",
   filters: {
     drivers:        ["VER", "NOR"],       # TLA codes
     driver_numbers: ["1", "4"],           # racing numbers
     constructors:   ["ferrari"],          # team keyword
     positions:      { min: 1, max: 5 },  # position range
-    event_types:    ["DRS_ENABLED"],      # raceevent feed only
+    event_types:    ["overtake"],         # events.race / events.qualifying feeds only
   }
 )
 ```

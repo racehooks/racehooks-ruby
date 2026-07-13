@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# RubyGems build output
+/pkg/
+*.gem
+
+# Test coverage
+/coverage/
+
+# Bundler
+/.bundle/
+# A gem library does not commit its lockfile.
+Gemfile.lock

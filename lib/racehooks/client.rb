@@ -14,9 +14,13 @@ module Racehooks
   #   feeds = client.get_feeds
   #   feeds[:feeds].each { |f| puts f["feedId"] }
   #
+  #   # List events
+  #   events = client.get_events(upcoming: true)
+  #   events[:events].each { |e| puts e[:name] }
+  #
   #   # Create a webhook
   #   result = client.create_webhook(
-  #     feed_id:        "timingdata",
+  #     feed_id:        "timing.data",
   #     webhook_url:    "https://example.com/hook",
   #     webhook_method: "post"
   #   )
@@ -80,6 +84,98 @@ module Racehooks
     end
 
     # ---------------------------------------------------------------------------
+    # Events
+    # ---------------------------------------------------------------------------
+
+    # List calendar events and their sessions (GET /v1/events).
+    #
+    # Each Event carries: +eventId+, +name+, +officialName+, +countryCode+,
+    # +countryName+, +location+, +circuitName+, +state+, +type+, +roundText+, and
+    # a nested +sessions+ array of EventSession records (+sessionId+, +type+,
+    # +name+, +status+, +startDate+, +endDate+, +gmtOffset+, +path+).
+    #
+    # @param limit    [Integer, nil] Page size.
+    # @param offset   [Integer, nil] Pagination offset.
+    # @param upcoming [Boolean] When true, only future events are returned.
+    # @param year     [String, Integer, nil] Restrict to a single season.
+    # @return [Hash] +{ events: [...], total: }+
+    def get_events(limit: nil, offset: nil, upcoming: false, year: nil)
+      query = build_query(
+        limit:    limit,
+        offset:   offset,
+        upcoming: (upcoming ? 1 : nil),
+        year:     year
+      )
+      get("/events#{query}")[:data]
+    end
+
+    # ---------------------------------------------------------------------------
+    # Live
+    # ---------------------------------------------------------------------------
+
+    # Fetch the current live-session context snapshot (GET /v1/live/context).
+    #
+    # Returns +{ active:, sessionName:, sessionType:, currentLap:, totalLaps:,
+    # flag:, drivers: [...], rcMessages: [...], updatedAt: }+. When no session is
+    # live, +active+ is +false+.
+    #
+    # @return [Hash] The LiveContext snapshot.
+    def get_live_context
+      get("/live/context")[:data]
+    end
+
+    # ---------------------------------------------------------------------------
+    # Fantasy
+    #
+    # Pit stop leaderboards and estimated F1 Fantasy points per driver. All three
+    # endpoints require a paid plan (Developer or higher).
+    # ---------------------------------------------------------------------------
+
+    # Estimated fantasy points per driver for a completed session
+    # (GET /v1/fantasy/races/:race_id/scores).
+    #
+    # Defaults to the Grand Prix; pass +session: "sprint"+ to score the Sprint
+    # (compressed points table). The response +sessionType+ echoes which session
+    # was scored.
+    #
+    # @param race_id [String] Race ID slug, e.g. "2026-bahrain-r1".
+    # @param session [String, nil] "grand_prix" (default) or "sprint".
+    # @return [Hash] +{ raceId:, sessionType:, scores: [...], dataQuality: }+
+    def get_race_scores(race_id, session: nil)
+      # The API querystring accepts session=sprint (default = Grand Prix); only
+      # the Sprint needs an explicit param.
+      query = session.to_s == "sprint" ? "?session=sprint" : ""
+      get("/fantasy/races/#{race_id}/scores#{query}")[:data]
+    end
+
+    # Running (provisional) fantasy score for each driver while a session is live
+    # (GET /v1/fantasy/session/:session_id/scores).
+    #
+    # Position, teammate and DNF components update live; grid-derived and
+    # fastest-lap components stay nil until the session ends (use
+    # +get_race_scores+ for the final breakdown). +live+ is false and +scores+ is
+    # empty when no session is currently live for this id.
+    #
+    # @param session_id [String] Session ID, e.g. "2026-bahrain-r1_Race".
+    # @return [Hash] +{ sessionId:, live:, provisional:, sessionType:,
+    #   currentLap:, totalLaps:, scores: [...] }+
+    def get_session_scores(session_id)
+      get("/fantasy/session/#{session_id}/scores")[:data]
+    end
+
+    # Pit stop time rankings for a session
+    # (GET /v1/fantasy/session/:session_id/pit-times).
+    #
+    # Each entry in +stops+ (and +fastestStop+) carries +driver+, +tla+, +team+,
+    # +pitStopTimeSec+ (the stationary pit-stop time in seconds), and +lap+.
+    #
+    # @param session_id [String] Session ID, e.g. "2026-bahrain-r1_Race".
+    # @return [Hash] +{ sessionId:, source:, fastestStop:, stops: [...] }+
+    def get_session_pit_times(session_id)
+      get("/fantasy/session/#{session_id}/pit-times")[:data]
+    end
+
+    # ---------------------------------------------------------------------------
     # Webhooks
     # ---------------------------------------------------------------------------
 
@@ -93,7 +189,7 @@ module Racehooks
     #   - +:driver_numbers+ Array of racing numbers, e.g. +["1","4"]+
     #   - +:constructors+   Array of team keywords, e.g. +["ferrari"]+
     #   - +:positions+      Hash +{ min: 1, max: 5 }+ for position range filter
-    #   - +:event_types+    Array of raceevent types (raceevent feed only)
+    #   - +:event_types+    Array of event types (events.race / events.qualifying feeds only)
     # @return [Hash] +{ webhook: {...}, webhook_secret: "...", tier: "..." }+
     def create_webhook(feed_id:, webhook_url:, webhook_method: "post", filters: nil)
       body = { feedId: feed_id, webhookUrl: webhook_url, webhookMethod: webhook_method }

@@ -1,0 +1,10 @@
+require "bundler/gem_tasks"
+require "rake/testtask"
+
+Rake::TestTask.new(:test) do |t|
+  t.libs << "lib" << "spec"
+  t.pattern = "spec/*_spec.rb"
+  t.warning = false
+end
+
+task default: :test

@@ -4,46 +4,54 @@ require "json"
 module Racehooks
   # Payload parsed from an incoming RaceHooks webhook delivery.
   #
+  # Every delivery follows the same envelope: a canonical hyphenated +feed+
+  # discriminator (e.g. "timing.data", "events.race", "analytics.strategy"),
+  # a +sessionId+, a +utc+ timestamp, and the feed body. Driver entries carry the
+  # full DriverRef identity block: +driverId+, +constructorId+, +number+, +tla+,
+  # +name+, +team+.
+  #
   # Attributes:
-  # - +feed+             Feed identifier (e.g. "timingdata", "cardata", "raceevent",
-  #                      "analytics.strategy", "weather.forecast_update", etc.).
+  # - +feed+             Canonical feed identifier (e.g. "timing.data", "weather.data",
+  #                      "events.race", "analytics.strategy", "weather.forecast-update").
   # - +session_id+       Active session ID string, or +nil+ between sessions.
-  # - +event+            Event slug on raceevent ("overtake") and weather feeds
-  #                      ("rain_onset", "weather.forecast_update"); +nil+ otherwise.
+  # - +event+            Event slug on events.race/events.qualifying ("overtake") and
+  #                      weather feeds ("rain-onset", "forecast-update"); +nil+ otherwise.
   # - +data+             Feed payload Hash for session-wide and data-wrapped feeds.
-  # - +drivers+          Array of per-driver Hashes. Present for timingdata, cardata,
+  # - +drivers+          Array of per-driver DriverRef Hashes. Present for timing.data,
   #                      analytics.strategy, analytics.race-odds, analytics.gap-projection,
   #                      and analytics.tire-strategy.
-  # - +constructors+     Array of constructor Hashes. Present for analytics.constructor.
+  # - +constructors+     Array of constructor Hashes. Present for analytics.team-points.
   # - +sectors+          Sector-probability Hash. Present for analytics.qualifying.
   # - +pairs+            Array of same-constructor H2H Hashes. Present for analytics.race-odds.
-  # - +race_id+          Race identifier string. Present on analytics feeds.
+  # - +race_id+          Race identifier string, distinct from +session_id+. Present on
+  #                      analytics feeds (nullable).
   # - +lap+              Race lap number. Present on per-lap analytics feeds.
   # - +utc+              UTC timestamp string. Present on most feeds.
   # - +after_race_id+    Identifies which race triggered the payload. Present on
   #                      analytics.championship-probability.
   # - +regulations_era+  Regulations era string (e.g. "2026"). Present on analytics feeds.
-  # - +replay+           Replay metadata Hash, or +nil+ for live deliveries.
+  # - +replay+           Replay metadata Hash (+simulationId+, +originalSessionId+,
+  #                      +sessionElapsed+), or +nil+ for live deliveries.
   # - +raw+              The full parsed Hash. Use +event[key]+ to read fields on the
-  #                      flat weather feeds (weather.forecast_update, .tyre_mismatch,
-  #                      .compound_crossover_alert), whose fields live at the top level.
+  #                      flat weather feeds (weather.forecast-update, .tire-mismatch,
+  #                      .compound-crossover), whose fields live at the top level.
   #
-  # The Analytics tier delivers 18 derived feeds (12 +analytics.*+ + 6 +weather.*+):
-  # the live-alert feeds (analytics.sector-pace, .battle, .pit-window,
-  # .track-conditions, .pit-quality) and data-wrapped weather feeds (rain_onset,
-  # rain_cleared, strategy_divergence) carry their payload in +data+; the flat
+  # The Analytics tier delivers a range of derived +analytics.*+ and +weather.*+
+  # feeds: the live-alert feeds (analytics.sector-pace, .battle, .pit-window,
+  # .track-conditions, .pit-quality) and data-wrapped weather feeds (rain-onset,
+  # rain-cleared, strategy-divergence) carry their payload in +data+; the flat
   # weather feeds expose fields at the top level (read via +event[...]+).
   #
   # @example
   #   event = Racehooks::Webhook.construct_event(raw_body, sig, secret)
   #   case event.feed
-  #   when "weatherdata"
+  #   when "weather.data"
   #     puts event.data["AirTemp"]
   #   when "analytics.strategy"
   #     event.drivers.each { |d| puts "#{d["tla"]}: pit #{d["pitStopProbability"]}" }
   #   when "analytics.battle"
   #     puts "battle: #{event.data["battleStatus"]} (lap #{event.lap})"
-  #   when "weather.forecast_update"
+  #   when "weather.forecast-update"
   #     puts "rain #{event["precipProbabilityPct"]}% — model #{event["model"]}"
   #   end
   class WebhookPayload

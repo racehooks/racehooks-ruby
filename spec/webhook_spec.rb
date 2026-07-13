@@ -3,7 +3,7 @@ require_relative "../lib/racehooks"
 
 class WebhookTest < Minitest::Test
   SECRET = "test_webhook_secret_abc123"
-  SAMPLE_BODY = '{"feed":"timingdata","sessionId":"session_monaco_r","data":{"1":{"LastLapTime":{"Value":"1:12.345"}}}}'
+  SAMPLE_BODY = '{"feed":"timing.data","sessionId":"session_monaco_r","data":{"1":{"LastLapTime":{"Value":"1:12.345"}}}}'
 
   # ---------------------------------------------------------------------------
   # compute_signature
@@ -59,7 +59,7 @@ class WebhookTest < Minitest::Test
     event = Racehooks::Webhook.construct_event(SAMPLE_BODY, sig, SECRET)
 
     assert_instance_of Racehooks::WebhookPayload, event
-    assert_equal "timingdata", event.feed
+    assert_equal "timing.data", event.feed
     assert_equal "session_monaco_r", event.session_id
     assert_instance_of Hash, event.data
   end
@@ -102,7 +102,7 @@ class WebhookTest < Minitest::Test
 
   def test_parse_payload_no_signature
     event = Racehooks::Webhook.parse_payload(SAMPLE_BODY)
-    assert_equal "timingdata", event.feed
+    assert_equal "timing.data", event.feed
   end
 
   def test_parse_payload_analytics_strategy_feed
@@ -115,10 +115,10 @@ class WebhookTest < Minitest::Test
     assert_equal 0.82, event.drivers[0]["pitStopProbability"]
   end
 
-  def test_parse_payload_analytics_constructor_feed
-    body = '{"feed":"analytics.constructor","sessionId":"s1","raceId":"2026-bahrain-r1","lap":22,"constructors":[{"constructorId":"red_bull","expectedConstructorPoints":31.2}]}'
+  def test_parse_payload_analytics_team_points_feed
+    body = '{"feed":"analytics.team-points","sessionId":"s1","raceId":"2026-bahrain-r1","lap":22,"constructors":[{"constructorId":"red_bull","expectedConstructorPoints":31.2}]}'
     event = Racehooks::Webhook.parse_payload(body)
-    assert_equal "analytics.constructor", event.feed
+    assert_equal "analytics.team-points", event.feed
     assert_equal 31.2, event.constructors[0]["expectedConstructorPoints"]
     assert_nil event.drivers
   end
@@ -137,20 +137,21 @@ class WebhookTest < Minitest::Test
   end
 
   def test_parse_payload_with_replay
-    body = '{"feed":"cardata","sessionId":"s1","data":{},"_replay":{"sourcePath":"2025/race/","originalUtc":"2025-05-25T14:00:00Z","speed":60,"isReplay":true}}'
+    body = '{"feed":"timing.data","sessionId":"s1","data":{},"_replay":{"simulationId":"sim_abc","originalSessionId":"2025-monaco-r1","sessionElapsed":"01:14:03.250"}}'
     event = Racehooks::Webhook.parse_payload(body)
     assert event.replay?, "expected replay? to be true"
-    assert_equal "2025/race/", event.replay["sourcePath"]
+    assert_equal "sim_abc", event.replay["simulationId"]
+    assert_equal "2025-monaco-r1", event.replay["originalSessionId"]
   end
 
   def test_parse_payload_null_session_id
-    body = '{"feed":"trackstatus","sessionId":null,"data":{"Status":"1"}}'
+    body = '{"feed":"session.track-status","sessionId":null,"data":{"Status":"1"}}'
     event = Racehooks::Webhook.parse_payload(body)
     assert_nil event.session_id
   end
 
   def test_parse_payload_data_accessible
-    body = '{"feed":"weatherdata","sessionId":"s1","data":{"AirTemp":"23.5","Humidity":"55"}}'
+    body = '{"feed":"weather.data","sessionId":"s1","data":{"AirTemp":"23.5","Humidity":"55"}}'
     event = Racehooks::Webhook.parse_payload(body)
     assert_equal "23.5", event.data["AirTemp"]
     assert_equal "55", event.data["Humidity"]
@@ -171,16 +172,16 @@ class WebhookTest < Minitest::Test
   end
 
   def test_parse_payload_weather_rain_event_exposes_event_slug
-    body = '{"feed":"weather.rain_onset","sessionId":"9724","event":"rain_onset","lap":14,"utc":"t","data":{"type":"rain_onset","precipRateMmhr":1.2}}'
+    body = '{"feed":"weather.rain-onset","sessionId":"9724","event":"rain-onset","lap":14,"utc":"t","data":{"type":"rain-onset","precipRateMmhr":1.2}}'
     event = Racehooks::Webhook.parse_payload(body)
-    assert_equal "rain_onset", event.event
+    assert_equal "rain-onset", event.event
     assert_equal 1.2, event.data["precipRateMmhr"]
   end
 
   def test_parse_payload_flat_weather_feed_via_bracket_accessor
-    body = '{"feed":"weather.forecast_update","sessionId":"9724","event":"weather.forecast_update","lap":10,"utc":"t","source":"open-meteo","model":"ukmo","currentPrecipRateMmhr":0.0,"precipProbabilityPct":65,"next60min":[]}'
+    body = '{"feed":"weather.forecast-update","sessionId":"9724","event":"forecast-update","lap":10,"utc":"t","source":"open-meteo","model":"ukmo","currentPrecipRateMmhr":0.0,"precipProbabilityPct":65,"next60min":[]}'
     event = Racehooks::Webhook.parse_payload(body)
-    assert_equal "weather.forecast_update", event.event
+    assert_equal "forecast-update", event.event
     assert_equal "ukmo", event["model"]
     assert_equal 65, event["precipProbabilityPct"]
   end

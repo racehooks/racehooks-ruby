@@ -142,8 +142,8 @@ class ClientFeedsTest < Minitest::Test
       [200, {
         data: {
           feeds: [
-            { feedId: "cardata", name: "Car Data", path: "CarData.z", availability: "pro" },
-            { feedId: "timingdata", name: "Timing Data", path: "TimingData", availability: "free" },
+            { feedId: "timing.data", name: "Timing Data", path: "TimingData", availability: "free" },
+            { feedId: "weather.data", name: "Weather Data", path: "WeatherData", availability: "analytics" },
           ],
           total: 2, limit: 50, offset: 0,
         }
@@ -165,7 +165,123 @@ class ClientFeedsTest < Minitest::Test
   def test_get_feeds_first_feed_id
     client = make_client(@stub)
     result = client.get_feeds
-    assert_equal "cardata", result[:feeds].first[:feedId]
+    assert_equal "timing.data", result[:feeds].first[:feedId]
+  end
+end
+
+class ClientEventsTest < Minitest::Test
+  def setup
+    @stub = StubServer.new.start
+    stub_auth(@stub)
+  end
+
+  def teardown
+    @stub.stop
+  end
+
+  def event_fixture
+    {
+      eventId:      "2026-bahrain",
+      name:         "Bahrain Grand Prix",
+      officialName: "Formula 1 Gulf Air Bahrain Grand Prix 2026",
+      countryCode:  "BRN",
+      countryName:  "Bahrain",
+      location:     "Sakhir",
+      circuitName:  "Bahrain International Circuit",
+      state:        "upcoming",
+      type:         "conventional",
+      roundText:    "Round 1",
+      sessions:     [
+        {
+          sessionId: "2026-bahrain_Race",
+          type:      "Race",
+          name:      "Race",
+          status:    "scheduled",
+          startDate: "2026-03-16T15:00:00Z",
+          endDate:   "2026-03-16T17:00:00Z",
+          gmtOffset: "+03:00",
+          path:      "2026/2026-03-16_Bahrain_Grand_Prix/2026-03-16_Race/",
+        },
+      ],
+    }
+  end
+
+  def test_get_events_returns_events_and_total
+    @stub.on(:get, "/v1/events") do
+      [200, { data: { events: [event_fixture], total: 1 } }]
+    end
+    client = make_client(@stub)
+    result = client.get_events
+    assert_equal 1, result[:total]
+    assert_equal 1, result[:events].length
+    assert_equal "Bahrain Grand Prix", result[:events].first[:name]
+  end
+
+  def test_get_events_exposes_full_event_and_session_fields
+    @stub.on(:get, "/v1/events") do
+      [200, { data: { events: [event_fixture], total: 1 } }]
+    end
+    client = make_client(@stub)
+    event = client.get_events[:events].first
+    assert_equal "2026-bahrain", event[:eventId]
+    assert_equal "Bahrain International Circuit", event[:circuitName]
+    assert_equal "Round 1", event[:roundText]
+    session = event[:sessions].first
+    assert_equal "2026-bahrain_Race", session[:sessionId]
+    assert_equal "+03:00", session[:gmtOffset]
+    assert_equal "2026/2026-03-16_Bahrain_Grand_Prix/2026-03-16_Race/", session[:path]
+  end
+
+  def test_get_events_forwards_query_params
+    captured = nil
+    @stub.on(:get, "/v1/events") do |req|
+      captured = req.query
+      [200, { data: { events: [], total: 0 } }]
+    end
+    client = make_client(@stub)
+    client.get_events(limit: 5, offset: 10, upcoming: true, year: 2026)
+    assert_equal "5", captured["limit"]
+    assert_equal "10", captured["offset"]
+    assert_equal "1", captured["upcoming"]
+    assert_equal "2026", captured["year"]
+  end
+
+  def test_get_events_omits_upcoming_when_false
+    captured = nil
+    @stub.on(:get, "/v1/events") do |req|
+      captured = req.query
+      [200, { data: { events: [], total: 0 } }]
+    end
+    client = make_client(@stub)
+    client.get_events
+    assert_nil captured["upcoming"]
+  end
+end
+
+class ClientLiveContextTest < Minitest::Test
+  def setup
+    @stub = StubServer.new.start
+    stub_auth(@stub)
+  end
+
+  def teardown
+    @stub.stop
+  end
+
+  def test_get_live_context_returns_snapshot
+    @stub.on(:get, "/v1/live/context") do
+      [200, { data: {
+        active: true, sessionName: "Race", sessionType: "Race",
+        currentLap: 12, totalLaps: 57, flag: "green",
+        drivers: [{ pos: 1, num: "1", tla: "VER", gap: "" }],
+        rcMessages: [], updatedAt: 1_700_000_000,
+      } }]
+    end
+    client = make_client(@stub)
+    ctx = client.get_live_context
+    assert_equal true, ctx[:active]
+    assert_equal 12, ctx[:currentLap]
+    assert_equal "VER", ctx[:drivers].first[:tla]
   end
 end
 
@@ -181,7 +297,7 @@ class ClientWebhooksTest < Minitest::Test
     @stub.stop
   end
 
-  def webhook_fixture(id: "wh_abc", feed_id: "timingdata", active: true, tier: "starter")
+  def webhook_fixture(id: "wh_abc", feed_id: "timing.data", active: true, tier: "starter")
     {
       webhookId:        id,
       feedId:           feed_id,
@@ -200,7 +316,7 @@ class ClientWebhooksTest < Minitest::Test
       [200, { data: { webhook: webhook_fixture, webhookSecret: "sec_abc", tier: "starter" } }]
     end
     client = make_client(@stub)
-    result = client.create_webhook(feed_id: "timingdata", webhook_url: "https://example.com/hook")
+    result = client.create_webhook(feed_id: "timing.data", webhook_url: "https://example.com/hook")
     assert_equal "wh_abc", result[:webhook][:webhookId]
     assert_equal "sec_abc", result[:webhookSecret]
   end
@@ -234,7 +350,7 @@ class ClientWebhooksTest < Minitest::Test
     end
     client = make_client(@stub)
     wh = client.get_webhook("wh_abc")
-    assert_equal "timingdata", wh[:feedId]
+    assert_equal "timing.data", wh[:feedId]
   end
 
   def test_get_webhook_not_found
