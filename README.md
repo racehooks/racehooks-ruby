@@ -320,6 +320,10 @@ end
 | `Racehooks::APIError` | Non-2xx response from the API |
 | `Racehooks::NetworkError` | Timeout, connection refused, DNS failure |
 
+## Documentation
+
+Full docs: https://racehooks.io/docs/sdk
+
 ## License
 
 MIT
