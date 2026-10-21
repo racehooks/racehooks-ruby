@@ -176,6 +176,69 @@ module Racehooks
     end
 
     # ---------------------------------------------------------------------------
+    # Session replay (simulate)
+    #
+    # Prepare a completed session's recorded-playback artifact, then stream it
+    # from the simulate-stream service as if it were live. Any authenticated tier
+    # can list and prepare real sessions; tier controls the artifact profile
+    # ("lite" vs "full") and the replay quota.
+    # ---------------------------------------------------------------------------
+
+    # List completed sessions available for replay (GET /v1/simulate/sessions).
+    #
+    # Self-serve tiers see the current season plus the curated demo session;
+    # +restrictedToSeason+ reports the applied clamp (nil when unrestricted).
+    # Each session carries +sessionId+ (e.g. "2026-great-britain_r"), +sessionName+,
+    # +eventId+, +eventName+, +circuitId+, +year+, +type+, +startDate+ and
+    # +analyticsPreview+ (full Analytics feeds on any plan, no replay slot used).
+    #
+    # @param year   [Integer, String, nil] Calendar year, e.g. 2026.
+    # @param type   [String, nil] "race", "qualifying", "sprint" or "practice".
+    # @param limit  [Integer, nil] Page size (1-500, default 200).
+    # @param offset [Integer, nil] Pagination offset.
+    # @return [Hash] +{ sessions: [...], total:, limit:, offset:, restrictedToSeason: }+
+    def get_replayable_sessions(year: nil, type: nil, limit: nil, offset: nil)
+      query = build_query(year: year, type: type, limit: limit, offset: offset)
+      get("/simulate/sessions#{query}")[:data]
+    end
+
+    # The curated demo session, resolved server-side (GET /v1/simulate/demo).
+    #
+    # @return [Hash] +{ sessionId:, sessionName:, status: }+ where +status+ is
+    #   "ready" or "missing".
+    def get_demo_session
+      get("/simulate/demo")[:data]
+    end
+
+    # Distinct-session replay-delivery quota for your tier (GET /v1/simulate/quota).
+    # Watching is unlimited; +-1+ means unlimited.
+    #
+    # @return [Hash] +{ limit:, used:, remaining:, unlocked: [...], currentSeasonOnly: }+
+    def get_replay_quota
+      get("/simulate/quota")[:data]
+    end
+
+    # Ensure a session's playback artifact exists, triggering (deduplicated)
+    # generation if it is cold (POST /v1/simulate/prepare).
+    #
+    # @param session_id [String] Archive session id, e.g. "2026-great-britain_r".
+    # @return [Hash] +{ sessionId:, sessionName:, modelVersion:, profile:, status:,
+    #   formatFallback: }+. +status+ is "ready", "preparing" (poll
+    #   +get_replay_status+), "missing" or "unknown".
+    def prepare_replay(session_id)
+      post("/simulate/prepare", { sessionId: session_id })[:data]
+    end
+
+    # Whether a session's playback artifact is ready to stream
+    # (GET /v1/simulate/status). Same shape as +prepare_replay+.
+    #
+    # @param session_id [String] Archive session id, e.g. "2026-great-britain_r".
+    # @return [Hash] The SimulateArtifact state.
+    def get_replay_status(session_id)
+      get("/simulate/status?session=#{URI.encode_www_form_component(session_id)}")[:data]
+    end
+
+    # ---------------------------------------------------------------------------
     # Webhooks
     # ---------------------------------------------------------------------------
 

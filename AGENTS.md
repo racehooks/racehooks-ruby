@@ -101,7 +101,8 @@ pits    = client.get_session_pit_times("2026-bahrain-r1_Race")           # pitSt
 `Client#authenticate` · `#get_feeds` · `#get_events` · `#get_live_context` · `#create_webhook` ·
 `#list_webhooks` · `#get_webhook` · `#update_webhook` · `#delete_webhook` · `#test_webhook` ·
 `#get_webhook_secret` · `#rotate_webhook_secret` · `#get_webhook_logs` · `#get_race_scores` ·
-`#get_session_scores` · `#get_session_pit_times`. Signature helpers:
+`#get_session_scores` · `#get_session_pit_times` · `#get_replayable_sessions` ·
+`#get_demo_session` · `#get_replay_quota` · `#prepare_replay` · `#get_replay_status`. Signature helpers:
 `Racehooks::Webhook.compute_signature`, `.verify_signature`, `.construct_event`, `.parse_payload`.
 
 ## Key facts for correct answers
