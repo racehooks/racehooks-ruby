@@ -462,3 +462,89 @@ class ClientErrorHandlingTest < Minitest::Test
     assert_raises(Racehooks::NetworkError) { client.authenticate }
   end
 end
+
+class ClientReplayTest < Minitest::Test
+  ARTIFACT = {
+    data: {
+      sessionId: "2026-great-britain_r", modelVersion: "v1", profile: "lite",
+      status: "preparing", formatFallback: true,
+    },
+  }.freeze
+
+  def setup
+    @stub = StubServer.new.start
+    stub_auth(@stub)
+  end
+
+  def teardown
+    @stub.stop
+  end
+
+  def test_get_replayable_sessions_sends_filters
+    query = nil
+    @stub.on(:get, "/v1/simulate/sessions") do |req|
+      query = req.query
+      [200, { data: { sessions: [{ sessionId: "2026-great-britain_r", analyticsPreview: true }],
+                      total: 1, limit: 20, offset: 0, restrictedToSeason: "2026" } }]
+    end
+    res = make_client(@stub).get_replayable_sessions(year: 2026, type: "race", limit: 20, offset: 0)
+    assert_equal({ "year" => "2026", "type" => "race", "limit" => "20", "offset" => "0" }, query)
+    assert_equal "2026", res[:restrictedToSeason]
+    assert_equal "2026-great-britain_r", res[:sessions].first[:sessionId]
+  end
+
+  def test_get_replayable_sessions_without_filters_sends_no_query
+    query = :unset
+    @stub.on(:get, "/v1/simulate/sessions") do |req|
+      query = req.query_string
+      [200, { data: { sessions: [], total: 0 } }]
+    end
+    assert_equal [], make_client(@stub).get_replayable_sessions[:sessions]
+    assert_nil query
+  end
+
+  def test_get_replay_status_sends_session_param
+    session = nil
+    @stub.on(:get, "/v1/simulate/status") do |req|
+      session = req.query["session"]
+      [200, ARTIFACT]
+    end
+    res = make_client(@stub).get_replay_status("2026-great-britain_r")
+    assert_equal "2026-great-britain_r", session
+    assert_equal "preparing", res[:status]
+  end
+
+  def test_prepare_replay_posts_session_id
+    body = nil
+    @stub.on(:post, "/v1/simulate/prepare") do |req|
+      body = JSON.parse(req.body)
+      [200, ARTIFACT]
+    end
+    res = make_client(@stub).prepare_replay("2026-great-britain_r")
+    assert_equal({ "sessionId" => "2026-great-britain_r" }, body)
+    assert_equal "lite", res[:profile]
+  end
+
+  def test_get_demo_session
+    @stub.on(:get, "/v1/simulate/demo") { [200, { data: { sessionId: "2026-demo_r", status: "ready" } }] }
+    res = make_client(@stub).get_demo_session
+    assert_equal "2026-demo_r", res[:sessionId]
+    assert_equal "ready", res[:status]
+  end
+
+  def test_get_replay_quota
+    @stub.on(:get, "/v1/simulate/quota") do
+      [200, { data: { limit: -1, used: 2, remaining: -1, unlocked: %w[a b], currentSeasonOnly: true } }]
+    end
+    res = make_client(@stub).get_replay_quota
+    assert_equal(-1, res[:limit])
+    assert_equal %w[a b], res[:unlocked]
+    assert res[:currentSeasonOnly]
+  end
+
+  def test_replay_error_raises_api_error
+    @stub.on(:get, "/v1/simulate/quota") { [402, "Upgrade required"] }
+    err = assert_raises(Racehooks::APIError) { make_client(@stub).get_replay_quota }
+    assert_match "402", err.message
+  end
+end

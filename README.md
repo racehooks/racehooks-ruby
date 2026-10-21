@@ -283,6 +283,19 @@ pits = client.get_session_pit_times("2026-bahrain-r1_Race")
 pits[:stops].each { |s| puts "#{s[:tla]}: #{s[:pitStopTimeSec]}s" }
 ```
 
+### Session replay
+
+Replay a completed session as if it were live: list sessions, warm the
+recorded-playback artifact, then stream it from the simulate-stream service.
+
+```ruby
+client.get_replayable_sessions(year: 2026, type: "race")  # { sessions:, total:, restrictedToSeason: }
+client.get_demo_session                                   # the curated demo session
+client.prepare_replay("2026-great-britain_r")             # generate the artifact if cold
+client.get_replay_status("2026-great-britain_r")          # status: ready | preparing | missing | unknown
+client.get_replay_quota                                   # { limit:, used:, remaining:, unlocked: }
+```
+
 ### Optional filters (on `create_webhook` and `update_webhook`)
 
 ```ruby
